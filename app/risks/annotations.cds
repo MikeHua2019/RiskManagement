@@ -53,6 +53,6 @@ annotate RiskService.Risks with @(UI : {
             Value       : impact,
             Criticality : criticality
         },
-        {Value : bp_BusinessPartner, @description: bp_BusinessPartner.LastName},
+        {Value : bp_BusinessPartner},
     ]},
 });
