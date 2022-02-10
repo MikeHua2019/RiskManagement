@@ -1,0 +1,119 @@
+## Generated mta.yaml based on template version 0.4.0
+## appName = MK_RISK_MANAGEMENT
+## language=nodejs; multitenant=false
+## approuter=
+_schema-version: '3.1'
+ID: MK_RISK_MANAGEMENT
+version: 2.0.0
+description: "A simple CAP project."
+parameters:
+  enable-parallel-deployments: true
+   
+build-parameters:
+  before-all:
+   - builder: custom
+     commands:
+      - npm ci
+      - npx -p @sap/cds-dk cds build --production
+
+modules:
+ # --------------------- SERVER MODULE ------------------------
+ - name: MK_RISK_MANAGEMENT-srv
+ # ------------------------------------------------------------
+   type: nodejs
+   path: gen/srv
+   parameters:
+     buildpack: nodejs_buildpack
+   build-parameters:
+     builder: npm-ci
+   requires:
+    # Resources extracted from CAP configuration
+    - name: MK_RISK_MANAGEMENT-xsuaa
+    - name: MK_RISK_MANAGEMENT-db
+    - name: MK_RISK_MANAGEMENT-destination-service
+   provides:
+    - name: srv-api      # required by consumers of CAP services (e.g. approuter)
+      properties:
+        srv-url: ${default-url}
+
+ # -------------------- SIDECAR MODULE ------------------------
+ - name: MK_RISK_MANAGEMENT-db-deployer
+ # ------------------------------------------------------------
+   type: hdb
+   path: gen/db  
+   parameters:
+     buildpack: nodejs_buildpack
+   requires:
+    # 'hana' and 'xsuaa' resources extracted from CAP configuration
+    - name: MK_RISK_MANAGEMENT-xsuaa
+    - name: MK_RISK_MANAGEMENT-db
+
+ # -----------------------APPROUTER----------------------------
+ - name: MK_RISK_MANAGEMENT-approuter
+ # ------------------------------------------------------------
+   type: nodejs
+   path: approuter
+   requires:
+      - name: MK_RISK_MANAGEMENT-xsuaa
+      - name: srv-api
+        group: destinations
+        properties:
+          forwardAuthToken: true
+          strictSSL: true
+          name: srv-binding
+          url: '~{srv-url}'
+   build-parameters:
+        requires:
+          - name: MK_RISK_MANAGEMENT-app
+            artifacts:
+              - ./*
+            target-path: resources
+   
+ # ------------------------- UI -------------------------------
+ - name: MK_RISK_MANAGEMENT-app
+ # ------------------------------------------------------------
+   type: html5
+   path: app
+   build-parameters:
+    supported-platforms: []
+
+resources:
+ # services extracted from CAP configuration
+ # 'service-plan' can be configured via 'cds.requires.<name>.vcap.plan'
+# ------------------------------------------------------------
+ - name: MK_RISK_MANAGEMENT-xsuaa
+# ------------------------------------------------------------
+   type: org.cloudfoundry.managed-service
+   parameters:
+     service: xsuaa
+     service-plan: application  
+     path: ./xs-security.json
+     config:
+       xsappname: 'MK_RISK_MANAGEMEN-${space}'
+       role-collections:
+        - name: 'RiskManager-${space}'
+          description: Manager Risks
+          role-template-references:
+            - $XSAPPNAME.RiskManager
+        - name: 'RiskViewer-${space}'
+          description: View Risks
+          role-template-references:
+            - $XSAPPNAME.RiskViewer
+
+# ------------------------------------------------------------
+ - name: MK_RISK_MANAGEMENT-db
+# ------------------------------------------------------------
+   type: com.sap.xs.hdi-container
+   parameters:
+     service: hana  # or 'hanatrial' on trial landscapes
+     service-plan: hdi-shared
+   properties:
+     hdi-service-name: ${service-name}
+
+# ------------------------------------------------------------
+ - name: MK_RISK_MANAGEMENT-destination-service
+# ------------------------------------------------------------
+   type: org.cloudfoundry.managed-service
+   parameters:
+     service: destination
+     service-plan: lite
